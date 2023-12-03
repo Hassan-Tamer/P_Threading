@@ -116,8 +116,6 @@ struct args* init_args(struct Matrix* mat1, struct Matrix* mat2,int index){
     args->mat1 = mat1;
     args->mat2 = matT;
     args->tup = tup;
-    // args->row_out = row1;
-    // args->column_out = column2;
     args->indx = index;
     return args;
 }
