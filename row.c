@@ -213,7 +213,7 @@ int main() {
     }
 
     print_matrix(mat3);
-    fp = fopen("output.txt","w");
+    fp = fopen("output.txt","a");
     for(int i=0;i<row1;i++){
         for(int j=0;j<column2;j++){
             fprintf(fp,"%d ",mat3->matrix[i][j]);

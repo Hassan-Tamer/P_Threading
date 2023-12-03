@@ -224,6 +224,7 @@ int main() {
         fprintf(fp,"\n");
     }
     fprintf(fp,"%f",cpu_time_used);
+    fprintf(fp,"\n");
     fclose(fp);
 
     return 0;
