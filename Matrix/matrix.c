@@ -265,6 +265,12 @@ int main() {
 
     fclose(fp);
 
+    if(column1 != row2){
+        printf("Matrix multiplication not possible\n");
+        fp = fopen("outputMatrix.txt","w");
+        fprintf(fp,"Matrix multiplication not possible\n");
+        exit(EXIT_FAILURE);
+    }
 
     // ************************** //
         // Multiply element wise
