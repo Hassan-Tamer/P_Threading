@@ -31,6 +31,7 @@ struct Result {
     int val;
     int row;
     int column;
+    int* rowval;
 };
 
 void initializeMatrix(struct Matrix *mat, int rows, int columns) {
@@ -134,26 +135,23 @@ void* multiply_mat(void *fun_args){
     struct Matrix *matT = my_args->mat2;
     struct tuple *tup = my_args->tup;
     int indx = my_args->indx;
-    int num_iterations = mat1->row*matT->row;
-    int count = 0;
-    struct tuple *tup_local;
-    tup_local = &my_args->tup[indx];
-    int row = tup_local->mul1_indx;
-    int col = tup_local->mul2_indx;
-    int* arr1 = mat1->matrix[row];
-    int* arr2 = matT->matrix[col];
-    count = dot_product(arr1,arr2,mat1->column);
+    int* count = (int *)malloc(matT->row * sizeof(int));
+    for(int i=0;i<matT->row;i++){
+        int* arr1 = mat1->matrix[indx];
+        int* arr2 = matT->matrix[i];
+        count[i] = dot_product(arr1,arr2,mat1->column);
+    }
+
     struct Result *res = (struct Result *)malloc(sizeof(struct Result));
-    res->val = count;
-    res->row = row;
-    res->column = col;
+    res->rowval = count;
+    res->row = indx;
     return res;
 }
 
 
 int main() {
     FILE *fp;
-    fp = fopen("input.txt", "r");
+    fp = fopen("inputMatrix.txt", "r");
     if (fp == NULL) {
         printf("Error opening the file.\n");
         exit(EXIT_FAILURE);
@@ -185,14 +183,15 @@ int main() {
 
     fclose(fp);
 
-    int num_thrds = row1*column2;
+    int num_thrds = row1;
+    int num_rows = row1;
     pthread_t threads[num_thrds];
     struct Result *results[num_thrds];
     struct args **all_args = (struct args **)malloc(num_thrds * sizeof(struct args *));
     
     clock_t start, end;
     start = clock();
-    for (int i = 0; i < num_thrds; i++) {
+    for (int i = 0; i < num_rows; i++) {
         all_args[i] = (struct args *)malloc(sizeof(struct args));
         all_args[i] = init_args(mat1, mat2,i);
         pthread_create(&threads[i], NULL, multiply_mat, all_args[i]);
@@ -201,20 +200,20 @@ int main() {
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 
 
-    for (int i = 0; i < num_thrds; i++) {
+    for (int i = 0; i < num_rows; i++) {
         pthread_join(threads[i], (void **)&results[i]);
     }
 
     // display results
     struct Matrix *mat3 = (struct Matrix *)malloc(sizeof(struct Matrix));
     initializeMatrix(mat3, row1, column2);
-    for (int i = 0; i < num_thrds; i++) {
+    for (int i = 0; i < num_rows; i++) {
         struct Result *res = results[i];
-        mat3->matrix[res->row][res->column] = res->val;
+        mat3->matrix[res->row] = res->rowval;
     }
 
     print_matrix(mat3);
-    fp = fopen("output.txt","w");
+    fp = fopen("outputMatrix.txt","a");
     for(int i=0;i<row1;i++){
         for(int j=0;j<column2;j++){
             fprintf(fp,"%d ",mat3->matrix[i][j]);
@@ -222,7 +221,6 @@ int main() {
         fprintf(fp,"\n");
     }
     fprintf(fp,"%f",cpu_time_used);
-    fprintf(fp,"\n");
     fclose(fp);
 
     return 0;

@@ -6,13 +6,14 @@
 
 double cpu_time_used;
 
-// Struct to hold multiple arguments
+// Struct to represent a matrix
 struct Matrix {
     int **matrix;
     int row;
     int column;
 };
 
+// Struct to hold multiple arguments
 struct args{
     struct Matrix *mat1;
     struct Matrix *mat2;
@@ -22,17 +23,20 @@ struct args{
     int indx;
 };
 
+// Helper struct to hold indices of rows that need to be multiplied
 struct tuple{
     int mul1_indx;
     int mul2_indx;
 };
 
+// struct to hold result
 struct Result {
     int val;
     int row;
     int column;
     int* rowval;
 };
+
 
 void initializeMatrix(struct Matrix *mat, int rows, int columns) {
     mat->row = rows;
@@ -129,11 +133,34 @@ int dot_product(int *arr1, int *arr2, int size) {
     return result;
 }
 
-void* multiply_mat(void *fun_args){
+void* multiply_mat_element(void *fun_args){
     struct args *my_args = (struct args *)fun_args;
     struct Matrix *mat1 = my_args->mat1;
     struct Matrix *matT = my_args->mat2;
     struct tuple *tup = my_args->tup;
+    int indx = my_args->indx;
+
+    int num_iterations = mat1->row*matT->row;
+    int count = 0;
+    struct tuple *tup_local;
+    tup_local = &my_args->tup[indx];
+    int row = tup_local->mul1_indx;
+    int col = tup_local->mul2_indx;
+    int* arr1 = mat1->matrix[row];
+    int* arr2 = matT->matrix[col];
+    count = dot_product(arr1,arr2,mat1->column);
+
+    struct Result *res = (struct Result *)malloc(sizeof(struct Result));
+    res->val = count;
+    res->row = row;
+    res->column = col;
+    return res;
+}
+
+void* multiply_mat_row(void *fun_args){
+    struct args *my_args = (struct args *)fun_args;
+    struct Matrix *mat1 = my_args->mat1;
+    struct Matrix *matT = my_args->mat2;
     int indx = my_args->indx;
     int* count = (int *)malloc(matT->row * sizeof(int));
     for(int i=0;i<matT->row;i++){
@@ -148,10 +175,65 @@ void* multiply_mat(void *fun_args){
     return res;
 }
 
+void displayResults(FILE *fp,int row_res,int col_res,int num_thrds,struct Result **results) {
+    struct Matrix *mat3 = (struct Matrix *)malloc(sizeof(struct Matrix));
+    initializeMatrix(mat3, row_res, col_res);
+    for (int i = 0; i < num_thrds; i++) {
+        struct Result *res = results[i];
+        mat3->matrix[res->row][res->column] = res->val;
+    }
+
+    print_matrix(mat3);
+    fp = fopen("outputMatrix.txt","w");
+    for(int i=0;i<row_res;i++){
+        for(int j=0;j<col_res;j++){
+            fprintf(fp,"%d ",mat3->matrix[i][j]);
+        }
+        fprintf(fp,"\n");
+    }
+    fprintf(fp,"%f",cpu_time_used);
+    fprintf(fp,"\n");
+    fclose(fp);
+}
+
+void free_Matrix(struct Matrix *mat){
+    int rows = mat->row;
+    for(int i=0;i<rows;i++){
+        free(mat->matrix[i]);
+    }
+    free(mat->matrix);
+    free(mat);
+}
+
+void free_args(struct args **all_args,int num_thrds){
+    for(int i=0;i<num_thrds;i++){
+        free(all_args[i]->tup);
+        // free_Matrix(all_args[i]->mat1);
+        // free_Matrix(all_args[i]->mat2);
+        free(all_args[i]);
+    }
+    free(all_args);
+}
+
+void free_Result(struct Result **results,int num_thrds){
+    for(int i=0;i<num_thrds;i++){
+        // free(results[i]->rowval);
+        // free(results[i]);
+    }
+    free(results);
+}
+
+
+
+
 
 int main() {
+    //**************//
+    // processing input
+    //**************//
+
     FILE *fp;
-    fp = fopen("input.txt", "r");
+    fp = fopen("inputMatrix.txt", "r");
     if (fp == NULL) {
         printf("Error opening the file.\n");
         exit(EXIT_FAILURE);
@@ -169,7 +251,7 @@ int main() {
             fscanf(fp, "%d", &mat1->matrix[i][j]);
         }
     }
-
+    
     fscanf(fp, "%d %d\n", &row2, &column2);
 
     struct Matrix *mat2 = (struct Matrix *)malloc(sizeof(struct Matrix));
@@ -183,37 +265,68 @@ int main() {
 
     fclose(fp);
 
-    int num_thrds = row1;
-    int num_rows = row1;
+
+    // ************************** //
+        // Multiply element wise
+    // ************************** //
+
+    int num_thrds = row1*column2;
     pthread_t threads[num_thrds];
     struct Result *results[num_thrds];
     struct args **all_args = (struct args **)malloc(num_thrds * sizeof(struct args *));
     
     clock_t start, end;
     start = clock();
-    for (int i = 0; i < num_rows; i++) {
+    for (int i = 0; i < num_thrds; i++) {
         all_args[i] = (struct args *)malloc(sizeof(struct args));
         all_args[i] = init_args(mat1, mat2,i);
-        pthread_create(&threads[i], NULL, multiply_mat, all_args[i]);
+        pthread_create(&threads[i], NULL, multiply_mat_element, all_args[i]);
     }
     end = clock();
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 
 
-    for (int i = 0; i < num_rows; i++) {
+    for (int i = 0; i < num_thrds; i++) {
         pthread_join(threads[i], (void **)&results[i]);
     }
 
-    // display results
+    displayResults(fp,row1,column2,num_thrds,results);
+
+    // ************************** //
+        // Multiply row wise
+    // ************************** //
+
+    num_thrds = row1;
+
+    pthread_t threads_row[num_thrds];
+    struct Result **results_row = (struct Result **)malloc(num_thrds * sizeof(struct Result *));
+    struct args **all_args_row = (struct args **)malloc(num_thrds * sizeof(struct args *));
+    
+    // clock_t start, end;
+    start = clock();
+    for (int i = 0; i < num_thrds; i++) {
+        all_args_row[i] = (struct args *)malloc(sizeof(struct args));
+        all_args_row[i] = init_args(mat1, mat2,i);
+        pthread_create(&threads_row[i], NULL, multiply_mat_row, all_args_row[i]);
+    }
+    end = clock();
+    cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+
+
+    for (int i = 0; i < num_thrds; i++) {
+        pthread_join(threads_row[i], (void **)&results[i]);
+    }
+
+
     struct Matrix *mat3 = (struct Matrix *)malloc(sizeof(struct Matrix));
     initializeMatrix(mat3, row1, column2);
-    for (int i = 0; i < num_rows; i++) {
+    for (int i = 0; i < num_thrds; i++) {
         struct Result *res = results[i];
         mat3->matrix[res->row] = res->rowval;
     }
 
     print_matrix(mat3);
-    fp = fopen("output.txt","a");
+    fp = fopen("outputMatrix.txt","a");
     for(int i=0;i<row1;i++){
         for(int j=0;j<column2;j++){
             fprintf(fp,"%d ",mat3->matrix[i][j]);
@@ -222,6 +335,7 @@ int main() {
     }
     fprintf(fp,"%f",cpu_time_used);
     fclose(fp);
+    
 
     return 0;
 }

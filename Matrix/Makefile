@@ -1,8 +1,8 @@
 all: matrix_merge
 
 matrix: matrix.c
-	$(CC) matrix.c -o matrix_merge
-	./matrix_merge
+	$(CC) matrix.c -o matrix
+	./matrix
 
 .PHONY: clean
 
